@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hello World</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      display: grid;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      background: #f1f5f9;
+      color: #172033;
+      transition: background-color 300ms ease;
+    }
+
+    main {
+      padding: 2rem;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 1.5rem;
+      font-size: clamp(3rem, 10vw, 5rem);
+      line-height: 1.05;
+    }
+
+    button {
+      padding: 0.8rem 1.2rem;
+      border: 0;
+      border-radius: 6px;
+      background: #172033;
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #334155;
+    }
+
+    button:focus-visible {
+      outline: 3px solid #0f766e;
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hello World</h1>
+    <button id="color-button" type="button">Change background</button>
+  </main>
+
+  <script>
+    const colorButton = document.querySelector("#color-button");
+
+    colorButton.addEventListener("click", () => {
+      const hue = Math.floor(Math.random() * 360);
+      document.body.style.backgroundColor = `hsl(${hue} 70% 80%)`;
+    });
+  </script>
+</body>
+</html>
