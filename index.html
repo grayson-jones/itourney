@@ -651,9 +651,10 @@
             <input class="score-input" id="away-score" type="number" min="0" max="99" inputmode="numeric" required>
           </div>
           <div class="card-entry" aria-label="Home team cards">
-            <span class="card-team" id="home-card-label"></span>
+            <span aria-hidden="true"></span>
             <span class="card-entry-header card-key"><i class="card-dot yellow"></i>Yellow</span>
             <span class="card-entry-header card-key"><i class="card-dot red"></i>Red</span>
+            <span class="card-team" id="home-card-label"></span>
             <input class="card-input" id="home-yellow" type="number" min="0" max="20" value="0" aria-label="Home team yellow cards">
             <input class="card-input" id="home-red" type="number" min="0" max="10" value="0" aria-label="Home team red cards">
             <span class="card-team" id="away-card-label"></span>
