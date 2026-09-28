@@ -306,6 +306,32 @@
         scrollbar-width: thin;
       }
 
+      .league-view { padding: 18px 20px 28px; }
+      .league-section-title { margin: 0 0 11px; font-size: 13px; font-weight: 750; }
+      .league-table-wrap { overflow-x: auto; }
+      .league-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 10px; }
+      .league-table th, .league-table td { padding: 8px 6px; border-bottom: 1px solid #edeee8; text-align: right; white-space: nowrap; }
+      .league-table th { color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+      .league-table th:nth-child(2), .league-table td:nth-child(2) { text-align: left; }
+      .league-table td:nth-child(2) { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+      .league-table tr.is-qualified td:first-child, .league-table tr.is-qualified td:last-child { color: var(--pitch); font-weight: 800; }
+      .league-table tr.is-qualified { background: #f6f8ef; }
+      .league-matchday-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 10px; }
+      .league-matchday-bar label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
+      .league-matchday-select { min-height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--ink); font-size: 10px; }
+      .league-fixtures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+      .league-match { display: grid; grid-template-columns: minmax(0, 1fr) 45px minmax(0, 1fr); align-items: center; gap: 7px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); text-align: left; }
+      .league-match:not(:disabled):hover { border-color: #8b9a81; background: #fbfcf7; }
+      .league-match:disabled { cursor: default; }
+      .league-team { overflow: hidden; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+      .league-team.away { text-align: right; }
+      .league-score { color: var(--pitch-dark); font-size: 12px; font-weight: 800; text-align: center; white-space: nowrap; }
+      .league-fixture-status { grid-column: 1 / -1; color: var(--muted); font-size: 9px; text-align: center; }
+      .league-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+      .league-actions-note { margin: 0; color: var(--muted); font-size: 10px; }
+      .advance-button { min-height: 36px; padding: 0 12px; border: 1px solid var(--pitch); border-radius: 5px; background: var(--pitch); color: white; font-size: 10px; font-weight: 750; }
+      .advance-button:disabled { border-color: #d8d9cf; background: #eceee7; color: #8d9288; cursor: not-allowed; }
+
       .round-column {
         display: flex;
         min-width: 252px;
@@ -575,6 +601,9 @@
         .round-column { min-width: 232px; flex-basis: 232px; }
         .round-column + .round-column { margin-left: 13px; }
         .empty-state { min-height: 340px; }
+        .league-view { padding: 15px 12px 22px; }
+        .league-fixtures { grid-template-columns: 1fr; }
+        .league-actions { align-items: stretch; flex-direction: column; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -610,12 +639,12 @@
             </div>
             <div class="setup-field">
               <label class="field-label" for="team-count">Number of teams</label>
-              <input class="number-input" id="team-count" name="teamCount" type="number" min="2" max="32" value="8" required>
+              <input class="number-input" id="team-count" name="teamCount" type="number" min="9" max="32" value="16" required>
             </div>
             <div class="team-list-heading"><span>Seed / club</span><span id="team-count-label">8 teams</span></div>
             <div class="team-list" id="team-list"></div>
             <button class="build-button" id="build-button" type="submit">Build bracket <span aria-hidden="true">→</span></button>
-            <p class="setup-footnote">Seeds set the opening draw. Teams with a first-round bye advance automatically.</p>
+            <p class="setup-footnote">Every team plays each other once. The top eight advance after all fixtures are complete.</p>
           </form>
         </aside>
 
@@ -677,7 +706,9 @@
       const STORAGE_KEY = "matchday-tournament-v1";
       const defaultTeams = [
         "Northbridge FC", "Riverside United", "Harbor Athletic", "Kingswell City",
-        "Redmont Rovers", "Eastvale FC", "Westhaven Town", "Lakeside Sporting"
+        "Redmont Rovers", "Eastvale FC", "Westhaven Town", "Lakeside Sporting",
+        "Stonebridge AFC", "Southport FC", "Greenfield Athletic", "Ashford United",
+        "Fairview City", "Highmoor FC", "Brookside Rovers", "Crestwood Town"
       ];
       const setupForm = document.querySelector("#setup-form");
       const countInput = document.querySelector("#team-count");
@@ -686,6 +717,7 @@
       const dialog = document.querySelector("#match-dialog");
       const matchForm = document.querySelector("#match-form");
       let editingMatch = null;
+      let selectedMatchday = 0;
       let draftTeams = defaultTeams.map((name, index) => ({ name, seed: index + 1 }));
 
       function loadTournament() {
@@ -764,8 +796,80 @@
         return rounds;
       }
 
+      function createLeagueRounds(teams) {
+        const rotatingTeams = teams.map(team => team.id);
+        if (rotatingTeams.length % 2) rotatingTeams.push(null);
+        const rounds = [];
+
+        for (let roundIndex = 0; roundIndex < rotatingTeams.length - 1; roundIndex++) {
+          const matches = [];
+          for (let pairIndex = 0; pairIndex < rotatingTeams.length / 2; pairIndex++) {
+            let homeId = rotatingTeams[pairIndex];
+            let awayId = rotatingTeams[rotatingTeams.length - 1 - pairIndex];
+            if (!homeId || !awayId) continue;
+            if ((roundIndex + pairIndex) % 2) [homeId, awayId] = [awayId, homeId];
+            matches.push({ homeId, awayId, score: null, yellow: [0, 0], red: [0, 0] });
+          }
+          rounds.push({ matches });
+          rotatingTeams.splice(1, 0, rotatingTeams.pop());
+        }
+        return rounds;
+      }
+
+      function getLeagueStandings() {
+        const standings = tournament.teams.map(team => ({
+          team, played: 0, wins: 0, draws: 0, losses: 0,
+          goalsFor: 0, goalsAgainst: 0, points: 0
+        }));
+        const byId = new Map(standings.map(row => [row.team.id, row]));
+        (tournament.leagueRounds || []).forEach(round => round.matches.forEach(match => {
+          if (!match.score) return;
+          const home = byId.get(match.homeId);
+          const away = byId.get(match.awayId);
+          if (!home || !away) return;
+          const [homeGoals, awayGoals] = match.score;
+          home.played++;
+          away.played++;
+          home.goalsFor += homeGoals;
+          home.goalsAgainst += awayGoals;
+          away.goalsFor += awayGoals;
+          away.goalsAgainst += homeGoals;
+          if (homeGoals > awayGoals) {
+            home.wins++;
+            home.points += 3;
+            away.losses++;
+          } else if (homeGoals < awayGoals) {
+            away.wins++;
+            away.points += 3;
+            home.losses++;
+          } else {
+            home.draws++;
+            away.draws++;
+            home.points++;
+            away.points++;
+          }
+        }));
+        return standings.sort((left, right) =>
+          right.points - left.points ||
+          (right.goalsFor - right.goalsAgainst) - (left.goalsFor - left.goalsAgainst) ||
+          right.goalsFor - left.goalsFor ||
+          left.team.seed - right.team.seed ||
+          left.team.name.localeCompare(right.team.name)
+        );
+      }
+
+      function getLeagueProgress() {
+        return (tournament.leagueRounds || []).reduce((total, round) =>
+          total + round.matches.filter(match => Boolean(match.score)).length, 0);
+      }
+
+      function isLeagueComplete() {
+        const totalMatches = (tournament.leagueRounds || []).reduce((total, round) => total + round.matches.length, 0);
+        return totalMatches > 0 && getLeagueProgress() === totalMatches;
+      }
+
       function firstRoundTeam(seed) {
-        return tournament.teams.find(team => team.seed === seed) || null;
+        return (tournament.knockoutTeams || tournament.teams).find(team => team.seed === seed) || null;
       }
 
       function getParticipants(roundIndex, matchIndex) {
@@ -845,9 +949,19 @@
       function renderTournament() {
         document.querySelector("#tournament-label").textContent = tournament.name || "Untitled tournament";
         const built = tournament.rounds.length > 0;
+        const hasLeagueStage = Array.isArray(tournament.leagueRounds);
         const teamTotal = tournament.teams.length;
         const played = built ? getTournamentProgress() : 0;
         const champion = built ? getWinner(tournament.rounds.length - 1, 0) : null;
+        if (hasLeagueStage) {
+          const leagueTotal = tournament.leagueRounds.reduce((total, round) => total + round.matches.length, 0);
+          document.querySelector("#tournament-subtitle").textContent = `League phase · Single round-robin · ${teamTotal} teams`;
+          document.querySelector("#summary-stats").innerHTML = `<div class="stat"><span class="stat-value">${teamTotal}</span><span class="stat-label">Teams</span></div>
+            <div class="stat"><span class="stat-value">${getLeagueProgress()}/${leagueTotal}</span><span class="stat-label">League matches</span></div>
+            <div class="stat"><span class="stat-value">${champion ? escapeAttribute(champion.name) : "Top 8"}</span><span class="stat-label">${champion ? "Champion" : "Advance"}</span></div>`;
+          bracketContent.innerHTML = renderLeagueStage() + (built ? renderKnockoutBracket() : "");
+          return;
+        }
         document.querySelector("#tournament-subtitle").textContent = built
           ? `${teamTotal} seeded teams · Single-elimination draw`
           : "Set up teams to create the draw";
@@ -863,6 +977,54 @@
         }
 
         bracketContent.innerHTML = `<div class="bracket-board" aria-label="Knockout bracket">
+          ${tournament.rounds.map((round, roundIndex) => `<section class="round-column" aria-label="${roundName(roundIndex)}">
+            <div class="round-heading"><span>${roundName(roundIndex)}</span><small>${round.matches.length} ${round.matches.length === 1 ? "match" : "matches"}</small></div>
+            <div class="match-stack">${round.matches.map((_, matchIndex) => renderMatch(roundIndex, matchIndex)).join("")}</div>
+          </section>`).join("")}
+        </div>`;
+      }
+
+      function renderLeagueStage() {
+        const standings = getLeagueStandings();
+        const complete = isLeagueComplete();
+        const matchday = Math.min(selectedMatchday, tournament.leagueRounds.length - 1);
+        selectedMatchday = matchday;
+        const matches = tournament.leagueRounds[matchday].matches;
+        const teamById = new Map(tournament.teams.map(team => [team.id, team]));
+        const rows = standings.map((row, index) => `<tr class="${index < 8 ? "is-qualified" : ""}">
+          <td>${index + 1}</td><td title="${escapeAttribute(row.team.name)}">${escapeAttribute(row.team.name)}</td>
+          <td>${row.played}</td><td>${row.wins}</td><td>${row.draws}</td><td>${row.losses}</td>
+          <td>${row.goalsFor}</td><td>${row.goalsAgainst}</td><td>${row.goalsFor - row.goalsAgainst}</td><td>${row.points}</td>
+        </tr>`).join("");
+        const fixtures = matches.map((match, matchIndex) => {
+          const home = teamById.get(match.homeId);
+          const away = teamById.get(match.awayId);
+          const score = match.score ? `${match.score[0]} – ${match.score[1]}` : "vs";
+          const status = match.score ? "Result saved" : "Enter result";
+          return `<button class="league-match" type="button" data-league-matchday="${matchday}" data-league-match="${matchIndex}" ${tournament.rounds.length ? "disabled" : ""} aria-label="Matchday ${matchday + 1}: ${escapeAttribute(home.name)} ${score} ${escapeAttribute(away.name)}. ${status}">
+            <span class="league-team">${escapeAttribute(home.name)}</span><span class="league-score">${score}</span><span class="league-team away">${escapeAttribute(away.name)}</span>
+            <span class="league-fixture-status">${status}</span>
+          </button>`;
+        }).join("");
+        const matchdayOptions = tournament.leagueRounds.map((_, index) => `<option value="${index}" ${index === matchday ? "selected" : ""}>Matchday ${index + 1}</option>`).join("");
+        const actions = tournament.rounds.length
+          ? `<div class="league-actions"><p class="league-actions-note">League standings locked for the knockout stage.</p></div>`
+          : `<div class="league-actions"><p class="league-actions-note">${complete ? "The top eight are ready to advance." : "Complete every fixture to finalize the top eight."}</p>
+              <button class="advance-button" id="start-knockout" type="button" ${complete ? "" : "disabled"}>Start knockout stage</button></div>`;
+        return `<section class="league-view" aria-label="League phase">
+          <h2 class="league-section-title">League standings</h2>
+          <div class="league-table-wrap"><table class="league-table">
+            <thead><tr><th scope="col">Pos</th><th scope="col">Club</th><th scope="col">P</th><th scope="col">W</th><th scope="col">D</th><th scope="col">L</th><th scope="col">GF</th><th scope="col">GA</th><th scope="col">GD</th><th scope="col">Pts</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>
+          <div class="league-matchday-bar"><h2 class="league-section-title">League fixtures</h2><label for="league-matchday">View <select id="league-matchday" class="league-matchday-select">${matchdayOptions}</select></label></div>
+          <div class="league-fixtures">${fixtures}</div>
+          ${actions}
+        </section>`;
+      }
+
+      function renderKnockoutBracket() {
+        return `<div class="bracket-board" aria-label="Knockout bracket">
           ${tournament.rounds.map((round, roundIndex) => `<section class="round-column" aria-label="${roundName(roundIndex)}">
             <div class="round-heading"><span>${roundName(roundIndex)}</span><small>${round.matches.length} ${round.matches.length === 1 ? "match" : "matches"}</small></div>
             <div class="match-stack">${round.matches.map((_, matchIndex) => renderMatch(roundIndex, matchIndex)).join("")}</div>
@@ -887,11 +1049,26 @@
       }
 
       function openMatch(roundIndex, matchIndex) {
-        editingMatch = { roundIndex, matchIndex };
         const match = tournament.rounds[roundIndex].matches[matchIndex];
         const [home, away] = getParticipants(roundIndex, matchIndex);
         if (!home || !away) return;
-        document.querySelector("#dialog-title").textContent = `${roundName(roundIndex)} · Match ${String(matchIndex + 1).padStart(2, "0")}`;
+        openResultDialog(match, home, away, `knockout`, roundIndex, matchIndex);
+      }
+
+      function openLeagueMatch(roundIndex, matchIndex) {
+        const match = tournament.leagueRounds[roundIndex].matches[matchIndex];
+        const teams = new Map(tournament.teams.map(team => [team.id, team]));
+        const home = teams.get(match.homeId);
+        const away = teams.get(match.awayId);
+        if (!home || !away) return;
+        openResultDialog(match, home, away, "league", roundIndex, matchIndex);
+      }
+
+      function openResultDialog(match, home, away, stage, roundIndex, matchIndex) {
+        editingMatch = { stage, roundIndex, matchIndex };
+        document.querySelector("#dialog-title").textContent = stage === "league"
+          ? `League · Matchday ${roundIndex + 1} · Match ${String(matchIndex + 1).padStart(2, "0")}`
+          : `${roundName(roundIndex)} · Match ${String(matchIndex + 1).padStart(2, "0")}`;
         document.querySelector("#dialog-subtitle").textContent = "Enter the final score and disciplinary record.";
         document.querySelector("#home-score-label").textContent = home.name;
         document.querySelector("#away-score-label").textContent = away.name;
@@ -914,13 +1091,13 @@
       function updateTieField() {
         const homeScore = document.querySelector("#home-score").value;
         const awayScore = document.querySelector("#away-score").value;
-        const tied = homeScore !== "" && awayScore !== "" && Number(homeScore) === Number(awayScore);
+        const tied = editingMatch?.stage !== "league" && homeScore !== "" && awayScore !== "" && Number(homeScore) === Number(awayScore);
         document.querySelector("#tie-field").hidden = !tied;
         document.querySelector("#tie-winner").required = tied;
       }
 
       countInput.addEventListener("change", () => {
-        const count = Math.max(2, Math.min(32, Number(countInput.value) || 2));
+        const count = Math.max(9, Math.min(32, Number(countInput.value) || 9));
         const current = readDraftTeams();
         const resized = Array.from({ length: count }, (_, index) => current[index] || {
           name: `Club ${String(index + 1).padStart(2, "0")}`,
@@ -936,8 +1113,8 @@
         event.preventDefault();
         const teams = readDraftTeams();
         const count = Number(countInput.value);
-        if (!Number.isInteger(count) || count < 2 || count > 32 || teams.length !== count) {
-          countInput.setCustomValidity("Choose between 2 and 32 teams.");
+        if (!Number.isInteger(count) || count < 9 || count > 32 || teams.length !== count) {
+          countInput.setCustomValidity("Choose between 9 and 32 teams.");
           countInput.reportValidity();
           countInput.setCustomValidity("");
           return;
@@ -947,14 +1124,18 @@
           alert("Enter a name for every club and use each ranking from 1 to the team count exactly once.");
           return;
         }
-        if (tournament.rounds.length && getTournamentProgress() > 0 && !confirm("Rebuilding the draw clears all recorded results. Continue?")) return;
+        const hasResults = getTournamentProgress() > 0 || getLeagueProgress() > 0;
+        if (hasResults && !confirm("Rebuilding the tournament clears all recorded results. Continue?")) return;
 
         tournament = {
           name: document.querySelector("#tournament-name").value.trim() || "Untitled tournament",
           teams: teams.map(team => ({ ...team, id: `club-${crypto.randomUUID()}` })),
+          leagueRounds: [],
+          knockoutTeams: null,
           rounds: []
         };
-        tournament.rounds = createRounds(tournament.teams);
+        tournament.leagueRounds = createLeagueRounds(tournament.teams);
+        selectedMatchday = 0;
         document.querySelector("#build-button").innerHTML = "Rebuild bracket <span aria-hidden=\"true\">→</span>";
         saveTournament();
         renderTournament();
@@ -963,6 +1144,21 @@
       bracketContent.addEventListener("click", event => {
         const button = event.target.closest(".match-card:not(:disabled)");
         if (button) openMatch(Number(button.dataset.round), Number(button.dataset.match));
+        const leagueButton = event.target.closest(".league-match:not(:disabled)");
+        if (leagueButton) openLeagueMatch(Number(leagueButton.dataset.leagueMatchday), Number(leagueButton.dataset.leagueMatch));
+        if (event.target.closest("#start-knockout") && isLeagueComplete() && !tournament.rounds.length) {
+          tournament.knockoutTeams = getLeagueStandings().slice(0, 8).map((row, index) => ({ ...row.team, seed: index + 1 }));
+          tournament.rounds = createRounds(tournament.knockoutTeams);
+          saveTournament();
+          renderTournament();
+        }
+      });
+
+      bracketContent.addEventListener("change", event => {
+        if (event.target.id === "league-matchday") {
+          selectedMatchday = Number(event.target.value);
+          renderTournament();
+        }
       });
 
       document.querySelector("#home-score").addEventListener("input", updateTieField);
@@ -974,20 +1170,30 @@
         event.preventDefault();
         if (!editingMatch) return;
         const { roundIndex, matchIndex } = editingMatch;
-        const match = tournament.rounds[roundIndex].matches[matchIndex];
-        const participants = getParticipants(roundIndex, matchIndex);
+        const isLeagueMatch = editingMatch.stage === "league";
+        const match = isLeagueMatch
+          ? tournament.leagueRounds[roundIndex].matches[matchIndex]
+          : tournament.rounds[roundIndex].matches[matchIndex];
+        const participants = isLeagueMatch
+          ? [tournament.teams.find(team => team.id === match.homeId), tournament.teams.find(team => team.id === match.awayId)]
+          : getParticipants(roundIndex, matchIndex);
         const score = [Number(document.querySelector("#home-score").value), Number(document.querySelector("#away-score").value)];
-        const winnerId = score[0] === score[1]
-          ? document.querySelector("#tie-winner").value
-          : participants[score[0] > score[1] ? 0 : 1].id;
-        if (!winnerId) return;
-
-        match.score = score;
-        match.yellow = [Number(document.querySelector("#home-yellow").value), Number(document.querySelector("#away-yellow").value)];
-        match.red = [Number(document.querySelector("#home-red").value), Number(document.querySelector("#away-red").value)];
-        match.winnerId = winnerId;
-        match.participants = participants.map(team => team.id);
-        resetDownstream(roundIndex);
+        if (!isLeagueMatch) {
+          const winnerId = score[0] === score[1]
+            ? document.querySelector("#tie-winner").value
+            : participants[score[0] > score[1] ? 0 : 1].id;
+          if (!winnerId) return;
+          match.score = score;
+          match.yellow = [Number(document.querySelector("#home-yellow").value), Number(document.querySelector("#away-yellow").value)];
+          match.red = [Number(document.querySelector("#home-red").value), Number(document.querySelector("#away-red").value)];
+          match.winnerId = winnerId;
+          match.participants = participants.map(team => team.id);
+          resetDownstream(roundIndex);
+        } else {
+          match.score = score;
+          match.yellow = [Number(document.querySelector("#home-yellow").value), Number(document.querySelector("#away-yellow").value)];
+          match.red = [Number(document.querySelector("#home-red").value), Number(document.querySelector("#away-red").value)];
+        }
         saveTournament();
         dialog.close();
         renderTournament();
@@ -998,6 +1204,8 @@
           draftTeams = tournament.teams.map(team => ({ name: team.name, seed: team.seed }));
           document.querySelector("#tournament-name").value = tournament.name;
           document.querySelector("#build-button").innerHTML = "Rebuild bracket <span aria-hidden=\"true\">→</span>";
+        } else if (tournament.teams.length) {
+          draftTeams = tournament.teams.map(team => ({ name: team.name, seed: team.seed }));
         }
         renderTeamFields(draftTeams);
         renderTournament();
