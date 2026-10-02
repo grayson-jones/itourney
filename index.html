@@ -332,6 +332,8 @@
       .league-actions-note { margin: 0; color: var(--muted); font-size: 10px; }
       .advance-button { min-height: 36px; padding: 0 12px; border: 1px solid var(--pitch); border-radius: 5px; background: var(--pitch); color: white; font-size: 10px; font-weight: 750; }
       .advance-button:disabled { border-color: #d8d9cf; background: #eceee7; color: #8d9288; cursor: not-allowed; }
+      .sim-button { border-color: #d9b646; background: #f2d86c; color: #2d2b1d; }
+      .sim-button:hover { background: #e7cc62; }
 
       .round-column {
         display: flex;
@@ -1011,6 +1013,7 @@
         const actions = tournament.rounds.length
           ? `<div class="league-actions"><p class="league-actions-note">League standings locked for the knockout stage.</p></div>`
           : `<div class="league-actions"><p class="league-actions-note">${complete ? "The top eight are ready to advance." : "Complete every fixture to finalize the top eight."}</p>
+              <button class="sim-button advance-button" id="simulate-league" type="button">Simulate league</button>
               <button class="advance-button" id="start-knockout" type="button" ${complete ? "" : "disabled"}>Start knockout stage</button></div>`;
         return `<section class="league-view" aria-label="League phase">
           <h2 class="league-section-title">League standings</h2>
@@ -1031,6 +1034,48 @@
             <div class="match-stack">${round.matches.map((_, matchIndex) => renderMatch(roundIndex, matchIndex)).join("")}</div>
           </section>`).join("")}
         </div>`;
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+      }
+
+      function generateSimulatedScore(homeTeam, awayTeam, roundIndex, matchIndex) {
+        const strengthDiff = (100 - homeTeam.seed) - (100 - awayTeam.seed) + 6;
+        const homeGoals = clamp(
+          Math.round(1 + Math.max(0, strengthDiff / 24) + (Math.sin((roundIndex + 1) * (matchIndex + 3)) + 1) * 0.45),
+          0,
+          4
+        );
+        const awayGoals = clamp(
+          Math.round(1 + Math.max(0, -strengthDiff / 28) + (Math.cos((roundIndex + 2) * (matchIndex + 5)) + 1) * 0.4),
+          0,
+          4
+        );
+        return [homeGoals, awayGoals];
+      }
+
+      function simulateLeagueStage() {
+        if (!tournament.leagueRounds.length || tournament.rounds.length) return;
+        tournament.leagueRounds.forEach((round, roundIndex) => {
+          round.matches.forEach((match, matchIndex) => {
+            const home = tournament.teams.find(team => team.id === match.homeId);
+            const away = tournament.teams.find(team => team.id === match.awayId);
+            if (!home || !away) return;
+            match.score = generateSimulatedScore(home, away, roundIndex, matchIndex);
+            match.yellow = [
+              clamp(Math.round(Math.random() * 2), 0, 2),
+              clamp(Math.round(Math.random() * 2), 0, 2)
+            ];
+            match.red = [
+              Math.random() < 0.08 ? 1 : 0,
+              Math.random() < 0.08 ? 1 : 0
+            ];
+          });
+        });
+        selectedMatchday = tournament.leagueRounds.length - 1;
+        saveTournament();
+        renderTournament();
       }
 
       function resetDownstream(roundIndex) {
@@ -1147,6 +1192,9 @@
         if (button) openMatch(Number(button.dataset.round), Number(button.dataset.match));
         const leagueButton = event.target.closest(".league-match:not(:disabled)");
         if (leagueButton) openLeagueMatch(Number(leagueButton.dataset.leagueMatchday), Number(leagueButton.dataset.leagueMatch));
+        if (event.target.closest("#simulate-league")) {
+          simulateLeagueStage();
+        }
         if (event.target.closest("#start-knockout") && isLeagueComplete() && !tournament.rounds.length) {
           tournament.knockoutTeams = getLeagueStandings().slice(0, 8).map((row, index) => ({ ...row.team, seed: index + 1 }));
           tournament.rounds = createRounds(tournament.knockoutTeams);
